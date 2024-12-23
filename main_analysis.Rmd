@@ -1,0 +1,2047 @@
+---
+title: "Breadth_H3N2"
+author: "Bingyi Yang"
+date: '2023-03-27'
+output: html_document
+---
+
+## Pre-analysis settings
+
+```{r Global_Setting, warning=FALSE, error=FALSE, message=FALSE}
+#
+# Clean antibody data
+#
+
+library(tidyverse)
+library(readxl)
+library(openxlsx)
+library(ggsci)
+library(lubridate)
+library(ggpubr)
+library(brms)
+library(rstan)
+library(colorspace)
+library(posterior)
+library(pROC)
+library(ggthemes)
+library(truncnorm)
+library(tableone)
+library(fdrtool)
+library(patchwork)
+
+theme_set(
+  
+  theme_bw() +
+    
+    theme(axis.text.x = element_text(size = 16,
+                                     colour = "black"),
+          axis.text.y = element_text(size = 16,
+                                     colour = "black"),
+          panel.grid.major = element_blank(),
+          panel.background = element_blank(),
+          panel.grid.minor = element_blank(),
+          panel.border = element_blank(),
+          axis.line = element_line(colour = "black"),
+          plot.margin = unit(c(1.5,1.5,1.5,1.5), "cm"),
+          panel.spacing = unit(3, "lines"),
+          axis.title.x = element_text(size = 16, face = 'bold',colour = "black"),
+          axis.title.y = element_text(size = 16, face = 'bold',colour = "black"),
+          plot.title = element_text(size = 24, face = 'bold',colour = "black"),
+          legend.text = element_text(size = 16, colour = "black"),
+          legend.title = element_text(size = 16, colour = "black"),
+          plot.title.position = 'plot',
+          strip.background = element_blank(),
+          strip.text = element_text(size = 16, face = 'bold',colour = "black"))
+    
+  
+)
+
+knitr::opts_chunk$set(echo = FALSE,
+                       warning = FALSE,
+                       message = FALSE)
+
+
+study_clors = c("smith" = "#6A8BA4",
+               "fonville_2014" = "#4C8373",
+               "fonville_2016" = "#94A16D",
+               "who" = "#D0A64B",
+               "who_nab" = "#3C5488FF",
+               "fonville_2016_children" = "#fd6c9e",
+               "Yang_v1" = "#C56068",
+               "fonville_2014_human" = "#BA7C57", 
+               "Hinojosa_2020" = "#3C5488FF", 
+               "Ertesvag_2022" = "#885C87", 
+               "Lessler_2012" = "#4c4c4c")
+
+
+study_labels = c("smith" = "Smith 2004 (1968 to 2004)",
+               "fonville_2014" = "Fonville 2014 (1968 to 2014)",
+               "fonville_2016" = "Fonville 2016 (1968 to 2012)",
+               "who" = "Crick reports (1999 to 2022)",
+               "who_nab" = "Crick reports, nAbs (1999 to 2022)",
+               "fonville_2016_children" = "Fonville, chilren (1989 to 2011)",
+               "Yang_v1" = "Yang, human (1968 to 2014)",
+               "fonville_2014_human" = "Fonville, human (1968 to 2014)", 
+               "Hinojosa_2020" = "Hinojosa, human (1968 to 2013)", 
+               "Ertesvag_2022" = "Ertesvag, human (1968 to 2014)", 
+               "Lessler_2012" = "Lessler, nAbs (1968 to 2008)")
+
+study_levels = c("smith",
+                 "fonville_2014",
+                 "fonville_2016",
+                 "who",
+                 "who_nab",
+                 "fonville_2016_children",
+                 "fonville_2014_human",
+                 "Yang_v1",
+                 "Hinojosa_2020",
+                 "Ertesvag_2022",
+                 "Lessler_2012")
+
+
+passage_colors = c(
+  "Both cultured in eggs" = "#E64B35FF",
+  "Reference strains cultured in eggs" = "#4DBBD5FF",
+  "Tested strains cultured in eggs" = "#00A087FF",
+  "Both cultured in cells"  = "#3C5488FF"
+)
+
+passage_labels = c(
+  # "Both cultured in eggs" = expression('Sr'['egg']*' & Ag'['egg']),
+  "Both cultured in eggs" = expression(''['Sr']*'Egg + '['Ag']*'Egg'),
+  "Reference strains cultured in eggs" = expression(''['Sr']*'Egg + '['Ag']*'Cell'),
+  "Tested strains cultured in eggs" = expression(''['Sr']*'Cell + '['Ag']*'Egg'),
+  "Both cultured in cells"  = expression(''['Sr']*'Cell + '['Ag']*'Cell')
+)
+
+subtype_colors = c("h1n1" = "#618678",
+                   "h3n2" = "#B19CD9")
+
+
+subtype_colors_snp = c("h1n1" = "#0b6121",
+                       "h3n2" = "#610b4b")
+
+```
+
+```{r functions, echo=FALSE}
+
+getModelDataWHO = function(data, i){
+  
+  data %>%
+    mutate(
+      passage = case_when(
+        infected_passage == "Egg" & tested_passage == "Egg" ~ "Both cultured in eggs",
+        infected_passage == "Cell" & tested_passage == "Cell" ~ "Both cultured in cells",
+        infected_passage == "Egg" & tested_passage == "Cell" ~ "Reference strains cultured in eggs",
+        infected_passage == "Cell" & tested_passage == "Egg" ~ "Tested strains cultured in eggs"
+      ),
+      passage = factor(passage,
+                       levels = c("Both cultured in eggs",
+                                  "Reference strains cultured in eggs",
+                                  "Tested strains cultured in eggs",
+                                  "Both cultured in cells"))
+    ) %>%
+    filter (
+      !is.na(passage) &
+        !is.na(log_titer)
+    ) %>%
+    dplyr::group_by(
+      infected_virus, year_diff, passage
+    ) %>%
+    ungroup %>%
+
+    filter(n() >= 3 & abs(as.numeric(as.character(year_diff))) <= 6) %>%
+    mutate(
+      subtype = case_when(names(hi_data)[i] == "h1n1" ~ "A(H1N1)",
+                          names(hi_data)[i] == "h3n2" ~ "A(H3N2)"),
+      seropositive = log_titer > 1,
+      year_diff = factor(year_diff)
+    )
+  
+}
+
+
+```
+
+The following functions load a list of cleaned antibody data for h3n2, including ferret, children and general population.
+
+```{r, read_combined_data, message=FALSE}
+
+dataList = read_rds("data/combined_data.rds")
+
+```
+
+## Figure 1 C & D
+
+```{r, figure_1, echo=FALSE, message=FALSE, warning=FALSE, fig.height=15, fig.width=12}
+
+smith = read_csv("data/smith.csv")
+
+strains = c("HK/1/68",
+            "EN/496/80",
+            "VI/2/90",
+            "FU/411/02")
+
+strain_colors = set_names(c("#4F92C7", "#80AA77", "#D18CB4", "#9171AB"),
+                          strains)
+
+strain_labels = set_names(c("A/Hong Kong/1/1968", 
+                            "A/England/496/1980", 
+                            "A/Victoria/2/1990", 
+                            "A/Fujian/411/2002"),
+                          strains)
+
+figure_1_c = 
+dataList$smith %>%
+  filter(
+    infected_strain %in% strains
+  ) %>%
+  mutate(
+    infected_strain = factor(infected_strain,
+                             levels = strains)
+  ) %>%
+  ggplot() +
+  aes(
+    x = jitter(tested_year),
+    y = log_titer,
+    color = infected_strain
+  ) +
+  geom_point(
+    size = 5,
+    alpha = 0.5
+  ) +
+  geom_vline(
+    xintercept = c(1968, 1980, 1990, 2002),
+    linetype = "dashed",
+    color = strain_colors,
+    size = 1
+  ) +
+  geom_smooth(
+    methods = "loess",
+    se = FALSE,
+    span = 0.9,
+    size = 1.8
+  ) +
+  scale_y_continuous(
+    name = "HAI titer",
+    limits = c(0, 9),
+    breaks = seq(0,9,1),
+    labels = 2^seq(0,9,1)*10,
+    expand = c(0, 0.1)
+  ) +
+  scale_x_continuous(
+    name = "Calendar year",
+    limits = c(1968, 2005),
+    breaks = seq(1970, 2005, 5),
+    expand = c(0, 0)
+  ) +
+  scale_color_manual(
+    name = "Immunizing virus",
+    values = strain_colors,
+    labels = strain_labels
+  ) +
+  theme(
+    plot.title = element_text(hjust = 0.5),
+    legend.position = "top",
+    axis.text.x = element_text(size = 24,
+                                     colour = "black"),
+    axis.text.y = element_text(size = 24,
+                                     colour = "black"),
+    axis.title.x = element_text(size = 24, face = 'bold',colour = "black"),
+    axis.title.y = element_text(size = 24, face = 'bold',colour = "black"),
+    legend.text = element_text(size = 24, colour = "black"),
+    legend.title = element_text(size = 24, colour = "black", face = 'bold')
+  ) +
+  guides(
+    color = guide_legend(
+      title = "Immunizing virus",
+      title.position = "left",
+      title.hjust = 0.5,
+      nrow = 2
+    )
+  )
+
+
+figure_1_d = dataList$smith %>%
+  filter(
+    infected_strain %in% strains
+  ) %>%
+  mutate(
+    infected_strain = factor(infected_strain,
+                             levels = strains)
+  ) %>%
+  ggplot() +
+  aes(
+    x = jitter(year_diff),
+    y = log_titer,
+    color = infected_strain
+  ) +
+  geom_point(
+    size = 5,
+    alpha = 0.5
+  ) +
+  geom_vline(
+    xintercept = rep(0, 4),
+    linetype = "dashed",
+    color = strain_colors,
+    size = 1
+  ) +
+  geom_hline(
+    yintercept = 2,
+    linetype = "dashed",
+    size = 1
+  ) +
+  geom_smooth(
+    methods = "loess",
+    se = FALSE,
+    span = 0.9,
+    size = 1.5
+  ) +
+  scale_y_continuous(
+    name = "HAI titer",
+    limits = c(0, 9),
+    breaks = seq(0,9,1),
+    labels = 2^seq(0,9,1)*10,
+    expand = c(0, 0.1)
+  ) +
+  scale_x_continuous(
+    name = "Years between isolation \n(Tested - Immunizing)",
+    limits = c(-30, 30),
+    expand = c(0, 0),
+    breaks = seq(-30, 30, 1),
+    labels = c("-30", rep("", 4),
+               "-25", rep("", 4),
+               "-20", rep("", 4),
+               "-15", rep("", 4),
+               "-10", rep("", 4),
+               "-5", rep("", 4),
+               
+               "0", rep("", 4),
+               
+               "5", rep("", 4),
+               "10", rep("", 4),
+               "15", rep("", 4),
+               "20", rep("", 4),
+               "25", rep("", 4),
+               "30"
+               )
+  ) +
+  theme(
+    plot.title = element_text(hjust = 0.5),
+    legend.position = "top",
+    axis.text.x = element_text(size = 24,
+                                     colour = "black"),
+    axis.text.y = element_text(size = 24,
+                                     colour = "black"),
+    axis.title.x = element_text(size = 24, face = 'bold',colour = "black"),
+    axis.title.y = element_text(size = 24, face = 'bold',colour = "black"),
+    legend.text = element_text(size = 24, colour = "black"),
+    legend.title = element_text(size = 24, colour = "black", face = 'bold')
+  ) +
+  guides(
+    color = guide_legend(
+      title = "Immunizing virus",
+      title.position = "left",
+      title.hjust = 0.5,
+      nrow = 2
+    )
+  ) +
+  scale_color_manual(
+    name = "Strain",
+    values = strain_colors,
+    labels = strain_labels
+  )
+
+figure_1_c / figure_1_d
+
+```
+
+## Figure 2
+
+### Read Crick's ferret data
+
+```{r read_ferret_data, echo=FALSE, message=FALSE, warning=FALSE}
+
+hi_data = read_rds('data/crick_ferret_data.rds')
+
+who_data = sp_data_passage = lapply(1:2, function(i) getModelDataWHO(hi_data[[i]], i)) %>%
+  do.call("rbind", .) %>%
+  group_split(
+    subtype, passage
+  )
+
+```
+
+### Estimate seroprevalence and GMT
+
+```{r figure_2_fit_model, echo=FALSE}
+
+glmWHO = lapply(seq_along(who_data), function(i){
+  
+  data_used = who_data[[i]] %>%
+    filter(
+      !(year_diff %in% c("-7", "-6"))
+    )
+  
+  m_used = glm(seropositive ~ 0 + year_diff, data = data_used)
+  
+  coef_used = summary(m_used)$coefficients
+  
+  tibble(
+    var = rownames(coef_used),
+    subtype = data_used$subtype[1],
+    passage = data_used$passage[1],
+    est = coef_used[,1],
+    est_ll = coef_used[,1] - 1.96*coef_used[,2],
+    est_ul = coef_used[,1] + 1.96*coef_used[,2]
+  ) %>%
+    mutate(
+      est = ifelse(est < 0, 0, est),
+      est = ifelse(est > 1, 1, est),
+      est_ll = ifelse(est_ll < 0, 0, est_ll),
+      est_ul = ifelse(est_ul > 1, 1, est_ul)
+    )
+  
+}) %>%
+  do_call('rbind', .) %>%
+  mutate(
+    year_diff = as.numeric(gsub("year_diff", "", var))
+  )
+
+lmWHO = lapply(seq_along(who_data), function(i){
+  
+  data_used = who_data[[i]] %>%
+    filter(
+      !(year_diff %in% c("-7", "-6"))
+    )
+  
+  m_used = lm(log_titer ~ 0 + year_diff,
+              data = data_used %>% 
+                mutate(
+                  log_titer = floor(log_titer)
+                ))
+  
+  coef_used = summary(m_used)$coefficients
+
+  
+  tibble(
+    var = rownames(coef_used),
+    subtype = data_used$subtype[1],
+    passage = data_used$passage[1],
+    est = coef_used[,1],
+    est_ll = coef_used[,1] - 1.96*coef_used[,2],
+    est_ul = coef_used[,1] + 1.96*coef_used[,2]
+  ) %>%
+    mutate(
+      est_ll = ifelse(est_ll < 0, 0, est_ll)
+    )
+  
+}) %>%
+  do_call('rbind', .) %>%
+  mutate(
+    year_diff = as.numeric(gsub("year_diff", "", var))
+  )
+
+```
+
+```{r, figure_2, echo=FALSE, message=FALSE, warning=FALSE, fig.height=10, fig.width=12}
+
+fig_2a = ggplot(glmWHO) +
+  aes(
+    x = year_diff,
+    y = est,
+    fill = passage,
+    color = passage
+  ) +
+  facet_wrap(
+    ~ subtype,
+    nrow = 1
+  ) +
+  geom_ribbon(
+    aes(
+      ymin = est_ll,
+      ymax = est_ul
+    ),
+    alpha = 0.2,
+    color = NA
+  ) +
+  geom_line(
+    linewidth = 0.8
+  ) +
+  geom_vline(
+    xintercept = 0,
+    linetype = "dashed"
+  ) +
+  geom_hline(
+    yintercept = 0.50,
+    linetype = "dashed"
+  ) +
+  scale_y_continuous(
+    name = expression("Proportion of titer ">=" 40"),
+    limits = c(0, 1),
+    expand = c(0.01, 0),
+    breaks = seq(0, 1, 0.2),
+    labels = seq(0, 1, 0.2)*100
+  ) +
+  scale_x_continuous(
+    name = "Years between isolation \n(Tested - Immunizing)",
+    limits = c(-6, 6),
+    expand = c(0, 0),
+    breaks = seq(-6, 6, 2)
+  ) +
+  scale_color_manual(
+    name = "Passage history",
+    values = passage_colors,
+    labels = passage_labels
+  )+
+  scale_fill_manual(
+    name = "Passage history",
+    values = passage_colors,
+    labels = passage_labels
+  ) +
+theme(
+  legend.position = "top"
+) +
+  guides(
+    color = guide_legend(nrow = 2),
+    fill = guide_legend(nrow = 2)
+  )
+
+
+
+
+fig_2b = ggplot(lmWHO) +
+  aes(
+    x = year_diff,
+    y = est,
+    fill = passage,
+    color = passage
+  ) +
+  facet_wrap(
+    ~ subtype,
+    nrow = 1
+  ) +
+  geom_ribbon(
+    aes(
+      ymin = est_ll,
+      ymax = est_ul
+    ),
+    alpha = 0.2,
+    color = NA
+  ) +
+  geom_line(
+    linewidth = 0.8
+  ) +
+  geom_vline(
+    xintercept = 0,
+    linetype = "dashed"
+  ) +
+  geom_hline(
+    yintercept = 2,
+    linetype = "dashed"
+  ) +
+  scale_y_continuous(
+    name = "Geometric mean titer",
+    limits = c(0, 7),
+    expand = c(0, 0),
+    breaks = seq(0, 7, 1),
+    labels = 2^seq(0, 7, 1)*10
+  ) +
+  scale_x_continuous(
+    name = "Years between isolation \n(Tested - Immunizing)",
+    limits = c(-6, 6),
+    expand = c(0, 0),
+    breaks = seq(-6, 6, 2)
+  ) +
+  scale_color_manual(
+    name = "Passage history",
+    values = passage_colors,
+    labels = passage_labels
+  )+
+  scale_fill_manual(
+    name = "Passage history",
+    values = passage_colors,
+    labels = passage_labels
+  ) +
+  theme(
+    legend.position = "top"
+  ) +
+  guides(
+    color = guide_legend(nrow = 2),
+    fill = guide_legend(nrow = 2)
+  )
+
+
+ggarrange(
+  fig_2b,
+  fig_2a,
+  nrow = 2,
+  align = 'hv',
+  heights = c(1, 1),
+  labels = LETTERS[1:2],
+  font.label = list(size = 20, face = "bold"),
+  common.legend = TRUE
+)
+
+
+```
+
+## Figure 3
+
+```{r read_figure_3_data, message=FALSE, echo=FALSE}
+
+aa_subset_h3n2 = read_csv('data/h3n2_aa.csv')
+
+aa_subset_h1n1 = read_csv('data/h1n1_aa.csv')
+
+```
+
+```{r figure_3_a}
+
+aa_vs_time_h3n2 = ggplot(
+  data = aa_subset_h3n2 %>%
+    drop_na(n_substutions)
+) +
+  aes(
+    x = factor(year_diff),
+    y = n_substutions
+  ) +
+  geom_boxplot(
+    alpha = 0.3,
+    width = 0.3,
+    color = subtype_colors["h3n2"],
+    fill = subtype_colors["h3n2"]
+  )  +
+  scale_y_continuous(
+    name = "Number of AA substitutions",
+    limits = c(0, 30),
+    expand = c(0, 0),
+    breaks = seq(0, 30, 5)
+  ) +
+  scale_x_discrete(
+    name = "Years between isolation",
+    labels = c("", "-6", "", "-4","", "-2","", "0", "", "2","", "4","","6", "")
+      ) +
+  # add subtitle in the middle
+  labs(
+    subtitle = "A(H3N2)"
+  ) +
+  theme(
+    plot.subtitle = element_text(size = 20, face = "bold", hjust = 0.5, vjust = 1)
+  )
+```
+
+```{r figure_3_b}
+
+aa_vs_time_h1n1 = ggplot(
+  data = aa_subset_h1n1 %>%
+    drop_na(n_substutions) %>%
+    filter(
+      n_substutions <= 30 &
+        abs(year_diff) <= 10
+    )
+) +
+  aes(
+    x = factor(year_diff),
+    y = n_substutions
+  ) +
+  geom_boxplot(
+    alpha = 0.3,
+    width = 0.3,
+    color = subtype_colors["h1n1"],
+    fill = subtype_colors["h1n1"]
+  )  +
+  scale_y_continuous(
+    name = "Number of AA substitutions",
+    limits = c(0, 30),
+    expand = c(0, 0),
+    breaks = seq(0, 30, 5)
+  ) +
+  scale_x_discrete(
+    name = "Years between isolation",
+    labels = c("-10", "", "-8", "", "-6", "", "-4","", "-2","", 
+               "0", 
+               "", "2","", "4","","6", "", "8", "", "10")
+  ) +
+  # add subtitle in the middle
+  labs(
+    subtitle = "A(H1N1)"
+  ) +
+  theme(
+    plot.subtitle = element_text(size = 20, face = "bold", hjust = 0.5, vjust = 1)
+  )
+```
+
+```{r figure_3_c}
+
+aa_cov_vs_time_h3n2 = aa_subset_h3n2 %>%
+  drop_na(
+    n_substutions
+  ) %>%
+  group_by(
+    year_diff
+  ) %>%
+  summarise(
+    sigma = sd(n_substutions),
+    mu = mean(n_substutions),
+    cov = sigma/mu
+  ) %>%
+  ggplot() +
+  aes(
+    x = year_diff,
+    y = cov
+  ) +
+  geom_point(
+    color = subtype_colors["h3n2"],
+    size = 4
+  )  +
+  geom_line() +
+  scale_y_continuous(
+    name = "Coefficient of variation \nof AA substitutions",
+    limits = c(0, 1.2),
+    expand = c(0, 0),
+    breaks = seq(0, 1.2, 0.2)
+  ) +
+  scale_x_continuous(
+    name = "Years between isolation",
+    limits = c(-7, 7),
+    expand = c(0, 0),
+    breaks = seq(-7, 7, 1),
+    labels = c("", "-6", "", "-4","", "-2","", "0", "", "2","", "4","","6", "")
+  ) +
+  # add subtitle in the middle
+  labs(
+    subtitle = "A(H3N2)"
+  ) +
+  theme(
+    plot.subtitle = element_text(size = 20, face = "bold", hjust = 0.5, vjust = 1)
+  )
+```
+
+```{r figure_3_d}
+aa_cov_vs_time_h1n1 = aa_subset_h1n1 %>%
+  drop_na(
+    n_substutions
+  ) %>%
+  filter(
+    n_substutions <= 30 &
+      abs(year_diff) <= 10
+  ) %>%
+  group_by(
+    year_diff
+  ) %>%
+  summarise(
+    sigma = sd(n_substutions),
+    mu = mean(n_substutions),
+    cov = sigma/mu
+  ) %>%
+  ggplot() +
+  aes(
+    x = year_diff,
+    y = cov
+  ) +
+  geom_point(
+    color = subtype_colors["h1n1"],
+    size = 4
+  )  +
+  geom_line() +
+  scale_y_continuous(
+    name = "Coefficient of variation \nof AA substitutions",
+    limits = c(0, 1.2),
+    expand = c(0, 0),
+    breaks = seq(0, 1.2, 0.2)
+  ) +
+  scale_x_continuous(
+    name = "Years between isolation",
+    limits = c(-10, 10),
+    expand = c(0, 0),
+    breaks = seq(-10, 10, 1),
+    labels = c("-10", "", "-8", "", "-6", "", "-4","", "-2","", 
+               "0", 
+               "", "2","", "4","","6", "", "8", "", "10")
+  ) +
+  # add subtitle in the middle
+  labs(
+    subtitle = "A(H1N1)"
+  ) +
+  theme(
+    plot.subtitle = element_text(size = 20, face = "bold", hjust = 0.5, vjust = 1)
+  )
+```
+
+```{r figure_3_e}
+
+aa_vs_hi_h3n2 = ggplot(
+  data = aa_subset_h3n2 %>%
+    drop_na(n_substutions) %>%
+    mutate(
+      n_substutions = cut(n_substutions, 
+                          breaks = c(seq(0, 30, 5)), 
+                          right = FALSE))
+) +
+  aes(
+    y = log_titer,
+    x = n_substutions
+  ) +
+  geom_hline(
+    yintercept = 2,
+    linetype = "dashed"
+  ) +
+  geom_boxplot(
+    alpha = 0.3,
+    width = 0.3,
+    color = subtype_colors["h3n2"],
+    fill = subtype_colors["h3n2"]
+  )  +
+  scale_y_continuous(
+    name = "HAI titer",
+    limits = c(0, 10),
+    expand = c(0, 0),
+    breaks = seq(0, 10, 1),
+    labels = 2^seq(0, 10, 1)*10
+  ) +
+  scale_x_discrete(
+    name = "Number of AA substitutions"
+  ) +
+  # add subtitle in the middle
+  labs(
+    subtitle = "A(H3N2)"
+  ) +
+  theme(
+    plot.subtitle = element_text(size = 20, face = "bold", hjust = 0.5, vjust = 1)
+  )
+
+
+```
+
+```{r figure_3_f}
+
+aa_vs_hi_h1n1 = ggplot(
+  data = aa_subset_h1n1 %>%
+    drop_na(n_substutions) %>%
+    filter(
+      n_substutions <= 30
+    ) %>% 
+    mutate(
+      n_substutions = cut(n_substutions, 
+                          breaks = c(seq(0, 30, 5)), 
+                          right = FALSE),
+      n_substutions = factor(n_substutions,
+                             levels = c("[0,5)",
+                                        "[5,10)",
+                                        "[10,15)",
+                                        "[15,20)",
+                                        "[20,25)",
+                                        "[25,30)")))
+) +
+  aes(
+    y = log_titer,
+    x = n_substutions
+  ) +
+  geom_hline(
+    yintercept = 2,
+    linetype = "dashed"
+  ) +
+  geom_boxplot(
+    alpha = 0.3,
+    width = 0.3,
+    color = subtype_colors["h1n1"],
+    fill = subtype_colors["h1n1"]
+  )  +
+  scale_y_continuous(
+    name = "HAI titer",
+    limits = c(0, 10),
+    expand = c(0, 0),
+    breaks = seq(0, 10, 1),
+    labels = 2^seq(0, 10, 1)*10
+  ) +
+  scale_x_discrete(
+    name = "Number of AA substitutions",
+    limits = c("[0,5)",
+               "[5,10)",
+               "[10,15)",
+               "[15,20)",
+               "[20,25)",
+               "[25,30)")
+  ) +
+  # add subtitle in the middle
+  labs(
+    subtitle = "A(H1N1)"
+  ) +
+  theme(
+    plot.subtitle = element_text(size = 20, face = "bold", hjust = 0.5, vjust = 1)
+  )
+
+```
+
+```{r figure_3_g}
+
+#
+# Predict seropositive with AA substitutions ------------
+#
+
+m_h3 = mgcv::gam(
+  seropositive ~ s(n_substutions) + passage,
+  data = aa_subset_h3n2 %>%
+    mutate(
+      seropositive = ifelse(log_titer > 2, 1, 0)
+    ),
+  family = binomial(link = "logit")
+)
+
+m_h1 = mgcv::gam(
+  seropositive ~ s(n_substutions) + passage,
+  data = aa_subset_h1n1 %>%
+    mutate(
+      seropositive = ifelse(log_titer > 2, 1, 0)
+    ),
+  family = binomial(link = "logit")
+)
+
+new = data.frame(
+  n_substutions = seq(0, 25, 1),
+  passage = "Both cultured in cells"
+)
+new$pred = predict(m_h3, newdata = new, type = "response", se.fit = TRUE)$fit
+new$se = predict(m_h3, newdata = new, type = "response", se.fit = TRUE)$se
+# calculate lower and upper using pred, and se
+new$lower = new$pred - 1.96 * new$se
+new$upper = new$pred + 1.96 * new$se
+
+new$pred_h1 = predict(m_h1, newdata = new, type = "response", se.fit = TRUE)$fit
+new$se_h1 = predict(m_h1, newdata = new, type = "response", se.fit = TRUE)$se
+# calculate lower and upper using pred, and se
+new$lower_h1 = new$pred_h1 - 1.96 * new$se_h1
+new$upper_h1 = new$pred_h1 + 1.96 * new$se_h1
+
+
+# change the above plot to ggplot functions
+prob_seropositive = ggplot(
+  data = new
+) +
+  aes(
+    x = n_substutions,
+    y = pred
+  ) +
+  geom_ribbon(
+    aes(ymin = lower, ymax = upper,
+        fill = "h3n2"),
+    alpha = 0.3
+  ) +
+  geom_line(
+    aes(
+      color = "h3n2"
+    ),
+    # color = subtype_colors["h3n2"],
+    size = 1
+  ) +
+  geom_ribbon(
+    aes(ymin = lower_h1, ymax = upper_h1,
+        fill = "h1n1"),
+    # fill = subtype_colors["h1n1"],
+    alpha = 0.3
+  ) +
+  geom_line(
+    aes(x = n_substutions, y = pred_h1,
+        color = "h1n1"),
+    # color = subtype_colors["h1n1"],
+    size = 1
+  ) +
+  geom_hline(
+    yintercept = 0.5,
+    linetype = "dashed"
+  ) +
+  scale_y_continuous(
+    name = expression("Probability of titer ">=" 40"),
+    limits = c(0, 1),
+    expand = c(0, 0),
+    breaks = seq(0, 1, 0.2)
+  ) +
+  scale_x_continuous(
+    name = "Number of AA substitutions",
+    limits = c(0, 25),
+    expand = c(0, 0),
+    breaks = seq(0, 25, 5)
+  ) +
+  scale_color_manual(
+    name = "Subtype",
+    values = subtype_colors[c(2,1)],
+    labels = c("A(H1N1)", "A(H3N2)"),
+    # change the order of labels
+    guide = guide_legend(reverse = TRUE)
+  ) +
+  scale_fill_manual(
+    name = "Subtype",
+    values = subtype_colors[c(2,1)],
+    labels = c("A(H1N1)", "A(H3N2)"),
+    # change the order of labels
+    guide = guide_legend(reverse = TRUE)
+  ) +
+  theme(
+    legend.position = c(0.15, 0.2),
+    plot.margin = unit(c(1.5,0.5,0.5,2.5), "cm")
+  )
+
+# ------------------------------
+
+
+```
+
+```{r figure_3_combined, fig.width=32, fig.height=14}
+
+top = ggarrange(aa_vs_time_h3n2,
+                aa_cov_vs_time_h3n2,
+                aa_vs_hi_h3n2, 
+                nrow = 1,
+                align = "hv",
+                labels = c("A", "C", "E"),
+                font.label = list(size = 28, face = "bold"))
+
+bottom = ggarrange(aa_vs_time_h1n1,
+                   aa_cov_vs_time_h1n1,
+                   aa_vs_hi_h1n1, 
+                   nrow = 1,
+                   align = "hv",
+                   labels = c("B", "D", "F"),
+                   font.label = list(size = 28, face = "bold"))
+
+left = ggarrange(top,
+                 bottom,
+                 nrow = 2,
+                 align = "hv")
+
+
+ggarrange(left, 
+          prob_seropositive,
+          ncol = 1,
+          # align = "hv",
+          heights = c(1.5,1),
+          labels = c("", "G"),
+          font.label = list(size = 28, face = "bold"))
+
+```
+
+## Figure 4
+
+```{r read_figure_4_data, message=FALSE}
+
+data = read_csv("data/human_hi_data.csv")
+
+studies = unique(as.character(data$study))
+
+# ferret and young childre
+study_gp1 = c("smith", "fonville_2014", "fonville_2016", "who",
+              "fonville_2016_children")
+
+# young children and all ages
+study_gp2 = c("Yang_v1", "fonville_2014_human", "fonville_2016_children", "Lessler_2012",
+              "Hinojosa_2020", "Ertesvag_2022")
+
+```
+
+```{r fit_seroprevalence_model, message=FALSE, echo=FALSE}
+library(mgcv)
+
+gamByStudy = lapply(1:length(studies), function(i){
+  
+  data_used = data %>%
+    mutate(
+      year_diff = as.numeric(as.character(year_diff))
+    ) %>%
+    filter(
+      study %in% studies[i]
+    ) 
+  
+  if(studies[i] == "who"){
+    data_used = data_used %>%
+      filter(
+        !(year_diff %in% c("-7", "-6"))
+      ) %>%
+      slice_sample(
+        n = 2290
+      )
+  }
+  
+  if(studies[i] == "smith"){
+    data_used = data_used %>%
+      slice_sample(
+        n = 2290
+      )
+  }
+  
+  
+  data_new = data_used %>%
+    select(
+      year_diff
+    ) %>%
+    distinct()
+  
+  m_used = gam(seropositive ~ s(year_diff), data = data_used)
+  
+  pred = predict(m_used, newdata = data_new, se.fit = TRUE)
+  
+  data_new %>%
+    mutate(
+      study = studies[i],
+      est = pred$fit,
+      est_ll = pred$fit - 1.96*pred$se.fit,
+      est_ul = pred$fit + 1.96*pred$se.fit
+    ) %>%
+    mutate(
+      est = ifelse(est < 0, 0, est),
+      est = ifelse(est > 1, 1, est),
+      est_ll = ifelse(est_ll < 0, 0, est_ll),
+      est_ul = ifelse(est_ul > 1, 1, est_ul)
+    )
+  
+}) %>%
+  do_call('rbind', .) %>%
+  mutate(
+    study = factor(study,
+                   levels = study_levels)
+  )
+
+
+```
+
+```{r fit_gmt_model, echo=FALSE, message=FALSE}
+gamGMTByStudy = lapply(1:length(studies), function(i){
+  
+  data_used = data %>%
+    mutate(
+      year_diff = as.numeric(as.character(year_diff))
+    ) %>%
+    filter(
+      study %in% studies[i]
+    ) 
+  
+  if(studies[i] == "who"){
+    data_used = data_used %>%
+      filter(
+        !(year_diff %in% c("-7", "-6"))
+      ) # %>%
+      # slice_sample(
+      #   n = 2290
+      # )
+  }
+  
+  # if(studies[i] == "smith"){
+  #   data_used = data_used %>%
+  #     slice_sample(
+  #       n = 2290
+  #     )
+  # }
+  
+  
+  data_new = data_used %>%
+    select(
+      year_diff
+    ) %>%
+    distinct()
+  
+  m_used = gam(log_titer ~ s(year_diff), 
+               data = data_used %>%
+                 mutate(
+                   log_titer = floor(log_titer)
+                 ))
+  
+  pred = predict(m_used, newdata = data_new, se.fit = TRUE)
+  
+  data_new %>%
+  mutate(
+    study = studies[i],
+    est = pred$fit,
+    est_ll = pred$fit - 1.96*pred$se.fit,
+    est_ul = pred$fit + 1.96*pred$se.fit
+  ) %>%
+  mutate(
+    est_ll = ifelse(est_ll < 0, 0, est_ll)
+  )
+  
+}) %>%
+  do_call('rbind', .) %>%
+  mutate(
+    study = factor(study,
+                  levels = study_levels)
+  )
+
+```
+
+```{r figure_4_c_e}
+
+sp_gam_1 = ggplot(
+  data = gamByStudy %>%
+    filter(
+     study %in% study_gp1
+    )
+) +
+  aes(
+    x = year_diff,
+    y = est,
+    fill = study,
+    color = study
+  ) +
+  geom_ribbon(
+    aes(
+      ymin = est_ll,
+      ymax = est_ul
+    ),
+    alpha = 0.2,
+    color = NA
+  ) +
+  geom_line(
+    linewidth = 0.8
+  ) +
+  geom_vline(
+    xintercept = 0,
+    linetype = "dashed"
+  ) +
+  geom_hline(
+    yintercept = 0.50,
+    linetype = "dashed"
+  ) +
+  scale_y_continuous(
+    name = expression("Proportion of titer ">=" 40"),
+    limits = c(0, 1),
+    expand = c(0.01, 0),
+    breaks = seq(0, 1, 0.2),
+    labels = seq(0, 1, 0.2)*100
+  ) +
+  scale_x_continuous(
+    name = "Years between isolation \n(Tested - Immunizing)",
+    limits = c(-15, 15),
+    expand = c(0, 0),
+    breaks = seq(-15, 15, 3)
+  ) +
+  scale_color_manual(
+    name = "Data source \n(Spanning of strains)",
+    values = study_clors,
+    labels = study_labels
+  ) +
+  scale_fill_manual(
+    name = "Data source \n(Spanning of strains)",
+    values = study_clors,
+    labels = study_labels
+  ) +
+  theme(
+    legend.position = "top"
+  ) +
+  guides(
+    color = guide_legend(nrow = 6),
+    fill = guide_legend(nrow = 6)
+  )
+
+
+sp_gam_2 = ggplot(
+  data = gamByStudy %>%
+    filter(
+      study %in% study_gp2
+    )
+) +
+  aes(
+    x = year_diff,
+    y = est,
+    fill = study,
+    color = study
+  ) +
+  geom_ribbon(
+    aes(
+      ymin = est_ll,
+      ymax = est_ul
+    ),
+    alpha = 0.2,
+    color = NA
+  ) +
+  geom_line(
+    linewidth = 0.8
+  ) +
+  geom_vline(
+    xintercept = 0,
+    linetype = "dashed"
+  ) +
+  geom_hline(
+    yintercept = 0.50,
+    linetype = "dashed"
+  ) +
+  scale_y_continuous(
+    name = expression("Proportion of titer ">=" 40"),
+    limits = c(0, 1),
+    expand = c(0.01, 0),
+    breaks = seq(0, 1, 0.2),
+    labels = seq(0, 1, 0.2)*100
+  ) +
+  scale_x_continuous(
+    name = "Years between isolation \n(Tested - Immunizing)",
+    limits = c(-15, 15),
+    expand = c(0, 0),
+    breaks = seq(-15, 15, 3)
+  ) +
+  scale_color_manual(
+    name = "Data source \n(Spanning of strains)",
+    values = study_clors,
+    labels = study_labels
+  ) +
+  scale_fill_manual(
+    name = "Data source \n(Spanning of strains)",
+    values = study_clors,
+    labels = study_labels
+  ) +
+  theme(
+    legend.position = "top"
+  ) +
+  guides(
+    color = guide_legend(nrow = 6),
+    fill = guide_legend(nrow = 6)
+  )
+```
+
+```{r figure_4_d_f}
+
+gmt_gam_1 = ggplot(
+  data = gamGMTByStudy %>%
+    filter(
+      study %in% study_gp1
+    )
+) +
+  aes(
+    x = year_diff,
+    y = est,
+    fill = study,
+    color = study
+  ) +
+  geom_ribbon(
+    aes(
+      ymin = est_ll,
+      ymax = est_ul
+    ),
+    alpha = 0.2,
+    color = NA
+  ) +
+  geom_line(
+    linewidth = 0.8
+  ) +
+  geom_vline(
+    xintercept = 0,
+    linetype = "dashed"
+  ) +
+  geom_hline(
+    yintercept = 2,
+    linetype = "dashed"
+  ) +
+  scale_y_continuous(
+    name = "Geometric mean titer",
+    limits = c(0, 7),
+    expand = c(0, 0),
+    breaks = seq(0, 7, 1),
+    labels = 2^seq(0, 7, 1)*10
+  ) +
+  scale_x_continuous(
+    name = "Years between isolation \n(Tested - Immunizing)",
+    limits = c(-15, 15),
+    expand = c(0, 0),
+    breaks = seq(-15, 15, 3)
+  ) +
+  scale_color_manual(
+    name = "Data source \n(Spanning of strains)",
+    values = study_clors,
+    labels = study_labels
+  ) +
+  scale_fill_manual(
+    name = "Data source \n(Spanning of strains)",
+    values = study_clors,
+    labels = study_labels
+  ) +
+  theme(
+    legend.position = "top"
+  ) +
+  guides(
+    color = guide_legend(nrow = 6),
+    fill = guide_legend(nrow = 6)
+  )
+
+
+gmt_gam_2 = ggplot(
+  data = gamGMTByStudy %>%
+    filter(
+      study %in% study_gp2
+    )
+) +
+  aes(
+    x = year_diff,
+    y = est,
+    fill = study,
+    color = study
+  ) +
+  geom_ribbon(
+    aes(
+      ymin = est_ll,
+      ymax = est_ul
+    ),
+    alpha = 0.2,
+    color = NA
+  ) +
+  geom_line(
+    linewidth = 0.8
+  ) +
+  geom_vline(
+    xintercept = 0,
+    linetype = "dashed"
+  ) +
+  geom_hline(
+    yintercept = 2,
+    linetype = "dashed"
+  ) +
+  scale_y_continuous(
+    name = "Geometric mean titer",
+    limits = c(0, 7),
+    expand = c(0, 0),
+    breaks = seq(0, 7, 1),
+    labels = 2^seq(0, 7, 1)*10
+  ) +
+  scale_x_continuous(
+    name = "Years between isolation \n(Tested - Immunizing)",
+    limits = c(-15, 15),
+    expand = c(0, 0),
+    breaks = seq(-15, 15, 3)
+  ) +
+  scale_color_manual(
+    name = "Data source \n(Spanning of strains)",
+    values = study_clors,
+    labels = study_labels
+  ) +
+  scale_fill_manual(
+    name = "Data source \n(Spanning of strains)",
+    values = study_clors,
+    labels = study_labels
+  ) +
+  theme(
+    legend.position = "top"
+  ) +
+  guides(
+    color = guide_legend(nrow = 6),
+    fill = guide_legend(nrow = 6)
+  )
+```
+
+```{r figure_4_combined, warning=FALSE, message=FALSE, fig.width=16, fig.height=10}
+
+sp = ggarrange(
+  sp_gam_1, sp_gam_2,
+  nrow = 1,
+  align = "hv",
+  labels = c("A", "B"),
+  font.label = list(size = 28, face = "bold")
+)
+
+gmt = ggarrange(
+  gmt_gam_1, gmt_gam_2,
+  nrow = 1,
+  align = "hv",
+  legend = FALSE,
+  labels = c("C", "D"),
+  font.label = list(size = 28, face = "bold")
+)
+
+ggarrange(
+  sp, gmt,
+  nrow = 2,
+  heights = c(1.3, 1)
+)
+```
+
+## Figure 5
+
+```{r Fonville_infected_individuals, message=FALSE, echo=FALSE}
+
+# identify infected individuals
+inf_ind = dataList$fonville_2014_human %>%
+  filter(
+    Sample == "H3 PCR+"
+  ) %>%
+  select(
+    `Subject Number`, 
+    # `Sample Year`, 
+    `PCR Results`,
+    `Row in Fonville Fig S15`
+  ) %>% 
+  distinct() %>%
+  drop_na() %>%
+  filter(
+    grepl("H3", `PCR Results`)
+  ) %>%
+  arrange(
+    `Row in Fonville Fig S15`
+  ) %>%
+  mutate(
+    pcr_pos_year = c(2010,
+                     2009,
+                     2009,
+                     2008,
+                     2009,
+                     2011,
+                     2009,
+                     2009,
+                     2008,
+                     2011,
+                     2011,
+                     2011),
+    
+    days = c(303,
+             18,
+             15,
+             98,
+             23,
+             293,
+             23,
+             43,
+             90,
+             298,
+             281, 
+             301)
+  )
+
+# estimate changes for these infected individuals
+
+change_inf = lapply(1:nrow(inf_ind), function(i){
+  
+  inf_yr = inf_ind$pcr_pos_year[i]
+  
+  dataList$fonville_2014_human %>%
+    filter(
+      `Subject Number` == inf_ind$`Subject Number`[i] &
+        (`Sample Year` == inf_yr | `Sample Year` == inf_yr-1)
+    ) %>%
+    drop_na(
+      log_titer
+    ) %>%
+    select(
+      `Subject Number`,
+      `Sample Year`,
+      age_at_isolation,
+      `Year of Birth`,
+      log_titer,
+      strain,
+      year
+    ) %>%
+    mutate(
+      `Sample Year` = ifelse(
+        `Sample Year` == inf_yr,
+        "PCR_pos_year",
+        "PCR_pos_ref_year"
+      )
+    )%>%
+    spread(
+      key = `Sample Year`,
+      value = log_titer
+    ) %>%
+    mutate(
+      diff = PCR_pos_year - PCR_pos_ref_year,
+      year_diff = year -inf_yr
+    ) %>%
+    drop_na(diff) 
+  
+}) %>%
+  do.call('rbind', .) %>%
+  mutate(
+    ref_interval = age_at_isolation - year_diff +  4,
+    phase_birth = case_when(
+      age_at_isolation < 4 ~ "Minimal to no exposure",
+      age_at_isolation >= 4 ~ "Expsoure encountered or anticipated"
+    ),
+    phase_infection = ifelse(
+      abs(year_diff) <= 6, 
+      "Within cross-reactivity breadth",
+      "Beyond cross-reactivity breadth"
+    )
+  ) 
+
+```
+
+```{r Hinojosa_2020_changes, echo=FALSE, message=FALSE}
+
+#
+# Hinojosa 2020 ---------------------------
+#
+
+hinojosa_diff = dataList$hinojosa %>%
+  select(
+    id, group, strain, age_at_isolation, year_of_isolation, sampling_time,  log_titer, pre_post
+  ) %>%
+  spread(
+    .,
+    key =  pre_post,
+    value = log_titer
+  ) %>%
+  drop_na() %>%
+  mutate(
+    diff_titer = PostVac - PreVac
+  ) %>%
+  gather(
+    .,
+    key = "sample_time",
+    value = "log_titer",
+    -id:-sampling_time
+  ) %>%
+  mutate(
+    groups = paste(group, sampling_time, sep = "_")
+  ) %>%
+  mutate(
+    sample_time = factor(sample_time,
+                         levels = c('PreVac',
+                                    "PostVac",
+                                    "diff_titer"))
+  )  %>%
+  mutate(
+    year_diff = year_of_isolation - sampling_time,
+    ref_interval = age_at_isolation - year_diff +  4,
+    phase_birth = case_when(
+      age_at_isolation < 4 ~ "Minimal to no exposure",
+      age_at_isolation >= 4 ~ "Expsoure encountered or anticipated"
+    ),
+    phase_infection = ifelse(
+      abs(year_diff) <= 6, 
+      "Within cross-reactivity breadth",
+      "Beyond cross-reactivity breadth"
+    )
+  )
+  
+
+
+# ---------------------------
+
+```
+
+```{r Ertesvag_2022_changes, echo=FALSE, message=FALSE}
+
+#
+# Ertesvag 2022 ---------------------------
+#
+
+ertesvag_diff = dataList$ertesvag %>%
+  filter(
+    pre_post %in% c("D0", "D28")
+  ) %>%
+  select(
+    id, group, strain, age_at_isolation, year_of_isolation, sampling_time,  log_titer, pre_post
+  ) %>%
+  spread(
+    .,
+    key =  pre_post,
+    value = log_titer
+  ) %>%
+  drop_na() %>%
+  mutate(
+    diff_titer = D28 - D0
+  ) %>%
+  gather(
+    .,
+    key = "sample_time",
+    value = "log_titer",
+    -id:-sampling_time
+  ) %>%
+  mutate(
+    groups = paste(group, sampling_time, sep = "_")
+  ) %>%
+  mutate(
+    sample_time = factor(sample_time,
+                         levels = c('D0',
+                                    "D28",
+                                    "diff_titer"))
+  ) %>%
+  mutate(
+    year_diff = year_of_isolation - sampling_time,
+    ref_interval = age_at_isolation - year_diff +  4,
+    phase_birth = case_when(
+      age_at_isolation < 4 ~ "Minimal to no exposure",
+      age_at_isolation >= 4 ~ "Expsoure encountered or anticipated"
+    ),
+    phase_infection = ifelse(
+      abs(year_diff) <= 6, 
+      "Within cross-reactivity breadth",
+      "Beyond cross-reactivity breadth"
+    )
+  )
+
+
+# ---------------------------
+```
+
+```{r figure_5_c_to_e, fig.width=14, fig.height=10}
+
+long_study_colors = c(
+      "fonville_2014_human" = "#BA7C57",
+      "Ertesvag_2022" = "#885C87",
+      "Hinojosa_2020_UU" = "#3C5488FF",
+      "Hinojosa_2020_VU_VI" = "#b1bacf"
+      )
+
+#
+# align to infection or vaccination time -----------------
+#
+align_to_inf =
+  change_inf %>%
+  mutate(
+    study = "fonville_2014_human",
+    log_titer = diff
+  ) %>%
+  select(
+    study, year_diff, log_titer
+  ) %>%
+  bind_rows(
+    .,
+    hinojosa_diff %>%
+      filter(
+        sample_time == "diff_titer"
+      ) %>%
+      mutate(
+        year_diff = year_of_isolation - sampling_time,
+        study = paste("Hinojosa_2020", group, sep = "_")
+      ) %>%
+      select(
+        study, year_diff, log_titer
+      )
+  ) %>%
+  bind_rows(
+    .,
+    ertesvag_diff %>%
+      filter(
+        sample_time == "diff_titer"
+      ) %>%
+      mutate(
+        year_diff = year_of_isolation - sampling_time,
+        study = "Ertesvag_2022"
+      ) %>%
+      select(
+        study, year_diff, log_titer
+      )
+
+  )
+
+align_to_inf_plot = ggplot(data = align_to_inf) +
+  aes(
+    x = year_diff,
+    y = log_titer,
+    color = study,
+    fill = study
+  ) +
+  geom_hline(
+    yintercept = 2,
+    linetype = 2
+  ) +
+  geom_hline(
+    yintercept = 0,
+    linetype = "dotted"
+  ) +
+  geom_vline(
+    xintercept = 0,
+    linetype = 2,
+    color = "#57385f",
+    lwd = 1.5,
+    alpha = 0.7
+  ) + 
+  geom_smooth(
+    method = 'loess',
+    formula = y ~ x,
+    se = TRUE,
+    alpha = 0.2
+  ) +
+
+  scale_y_continuous(
+    name = "Fold change",
+    limits = c(-1, 5),
+    expand = c(0, 0),
+    breaks = seq(-1, 5, 1),
+    labels = 2^(seq(-1, 5, 1))
+  ) +
+  scale_x_continuous(
+    name = "Years between isolation and infection \nor vaccination (Ref.1)",
+    limits = c(-45, 5),
+    expand = c(0, 0),
+    breaks = seq(-45, 5, 5),
+    labels = c(-45, '', -35, '', -25, '', -15, '', -5, '', 5)
+  ) +
+  scale_color_manual(
+    name = "Data source",
+    values = long_study_colors,
+    labels = c(
+      "fonville_2014_human" = "Fonville, 2014",
+      "Ertesvag_2022" = "Ertesvag, 2022",
+      "Hinojosa_2020_UU" = "Hinojosa, 2020 (previously unvaccinated)",
+      "Hinojosa_2020_VU_VI" = "Hinojosa 2020 (previously vaccinated)"
+    )
+    )+
+  scale_fill_manual(
+    name = "Data source",
+    values = long_study_colors,
+    labels = c(
+      "fonville_2014_human" = "Fonville, 2014",
+      "Ertesvag_2022" = "Ertesvag, 2022",
+      "Hinojosa_2020_UU" = "Hinojosa, 2020 (previously unvaccinated)",
+      "Hinojosa_2020_VU_VI" = "Hinojosa 2020 (previously vaccinated)"
+    )) +
+  theme(
+    legend.position = "top"
+  ) +
+  guides(
+    color = guide_legend(
+      nrow = 2
+    ),
+    fill = guide_legend(
+      nrow = 2
+    )
+  )
+# -----------------
+
+
+# align to 4-year old - within cross-reaction breadth -----------------
+
+
+align_to_birth_beyond =
+  change_inf %>%
+    filter(
+      phase_infection == "Beyond cross-reactivity breadth"
+    )  %>%
+    mutate(
+    ref = age_at_isolation - 4,
+    study = "fonville_2014_human",
+    log_titer = diff
+  )  %>%
+  select(
+    study, ref, log_titer
+  ) %>%
+  bind_rows(
+    .,
+    hinojosa_diff %>%
+      filter(
+        sample_time == "diff_titer" &
+          phase_infection == "Beyond cross-reactivity breadth"
+      ) %>%
+      mutate(
+        ref = age_at_isolation - 4,
+        study = paste("Hinojosa_2020", group, sep = "_")
+      ) %>%
+      select(
+        study, ref, log_titer
+      )
+  ) %>%
+  bind_rows(
+    .,
+    ertesvag_diff %>%
+      filter(
+        sample_time == "diff_titer" &
+          phase_infection == "Beyond cross-reactivity breadth"
+      ) %>%
+      mutate(
+        ref = age_at_isolation - 4,
+        year_diff = year_of_isolation - sampling_time,
+        study = "Ertesvag_2022"
+      ) %>%
+      select(
+        study, ref, log_titer
+      )
+
+  )
+
+align_to_birth_beyond_plot = 
+ggplot(data = align_to_birth_beyond) +
+  aes(
+    x = ref,
+    y = log_titer,
+    color = study,
+    fill = study
+  ) +
+  geom_hline(
+    yintercept = 2,
+    linetype = 2
+  ) +
+  geom_hline(
+    yintercept = 0,
+    linetype = "dotted"
+  ) +
+  geom_vline(
+    xintercept = 0,
+    linetype = 2,
+    color = '#0099B4FF',
+    lwd = 1.5,
+    alpha = 0.7
+  ) + 
+  geom_smooth(
+    method = 'loess',
+    formula = y ~ x,
+    se = TRUE,
+    alpha = 0.2
+  ) +
+
+  scale_y_continuous(
+    name = "Fold change",
+    limits = c(-1, 5),
+    expand = c(0, 0),
+    breaks = seq(-1, 5, 1),
+    labels = 2^(seq(-1, 5, 1))
+  ) +
+  scale_x_continuous(
+    name = "Years between isolation and\n 4-year-old (Ref.2)",
+    limits = c(-45, 65),
+    expand = c(0, 0),
+    breaks = seq(-45, 65, 5),
+    labels = c(-45, '', -35, '', -25, '', -15, '', -5, '', 5, '', 15, '', 25, '', 35, '', 45, '', 55, '', 65)
+  ) +
+  scale_color_manual(
+    name = "Data source",
+    values = long_study_colors,
+    labels = c(
+      "fonville_2014_human" = "Fonville, 2014",
+      "Ertesvag_2022" = "Ertesvag, 2022",
+      "Hinojosa_2020_UU" = "Hinojosa, 2020 (previously unvaccinated)",
+      "Hinojosa_2020_VU_VI" = "Hinojosa 2020 (previously vaccinated)"
+    )
+    )+
+  scale_fill_manual(
+    name = "Data source",
+    values = long_study_colors,
+    labels = c(
+      "fonville_2014_human" = "Fonville, 2014",
+      "Ertesvag_2022" = "Ertesvag, 2022",
+      "Hinojosa_2020_UU" = "Hinojosa, 2020 (previously unvaccinated)",
+      "Hinojosa_2020_VU_VI" = "Hinojosa 2020 (previously vaccinated)"
+    )) +
+  theme(
+    legend.position = "top"
+  )
+  
+
+# -----------------
+
+
+# align to 4-year old - within cross-reaction breadth -----------------
+
+align_to_birth_within =
+  change_inf %>%
+  filter(
+    phase_infection == "Within cross-reactivity breadth"
+  )  %>%
+  mutate(
+    ref = age_at_isolation - 4,
+    study = "fonville_2014_human",
+    log_titer = diff
+  )  %>%
+  select(
+    study, ref, log_titer
+  ) %>%
+  bind_rows(
+    .,
+    hinojosa_diff %>%
+      filter(
+        sample_time == "diff_titer" &
+          phase_infection == "Within cross-reactivity breadth"
+      ) %>%
+      mutate(
+        ref = age_at_isolation - 4,
+        study = paste("Hinojosa_2020", group, sep = "_")
+      ) %>%
+      select(
+        study, ref, log_titer
+      )
+  ) %>%
+  bind_rows(
+    .,
+    ertesvag_diff %>%
+      filter(
+        sample_time == "diff_titer" &
+          phase_infection == "Within cross-reactivity breadth"
+      ) %>%
+      mutate(
+        ref = age_at_isolation - 4,
+        year_diff = year_of_isolation - sampling_time,
+        study = "Ertesvag_2022"
+      ) %>%
+      select(
+        study, ref, log_titer
+      )
+    
+  )
+
+align_to_birth_within_plot = 
+  ggplot(data = align_to_birth_within) +
+  aes(
+    x = ref,
+    y = log_titer,
+    color = study,
+    fill = study
+  ) +
+  geom_hline(
+    yintercept = 2,
+    linetype = 2
+  ) +
+  geom_hline(
+    yintercept = 0,
+    linetype = "dotted"
+  ) +
+  geom_vline(
+    xintercept = 0,
+    linetype = 2,
+    color = '#0099B4FF',
+    lwd = 1.5,
+    alpha = 0.7
+  ) + 
+  geom_smooth(
+    method = 'loess',
+    formula = y ~ x,
+    se = TRUE,
+    alpha = 0.2
+  ) +
+  
+  scale_y_continuous(
+    name = "Fold change",
+    limits = c(-1, 5),
+    expand = c(0, 0),
+    breaks = seq(-1, 5, 1),
+    labels = 2^(seq(-1, 5, 1))
+  ) +
+  scale_x_continuous(
+    name = "Years between isolation and\n 4-year-old (Ref.2)",
+    limits = c(-45, 65),
+    expand = c(0, 0),
+    breaks = seq(-45, 65, 5),
+    labels = c(-45, '', -35, '', -25, '', -15, '', -5, '', 5, '', 15, '', 25, '', 35, '', 45, '', 55, '', 65)
+  ) +
+  scale_color_manual(
+    name = "Data source",
+    values = long_study_colors,
+    labels = c(
+      "fonville_2014_human" = "Fonville, 2014",
+      "Ertesvag_2022" = "Ertesvag, 2022",
+      "Hinojosa_2020_UU" = "Hinojosa, 2020 (previously unvaccinated)",
+      "Hinojosa_2020_VU_VI" = "Hinojosa 2020 (previously vaccinated)"
+    )
+  )+
+  scale_fill_manual(
+    name = "Data source",
+    values = long_study_colors,
+    labels = c(
+      "fonville_2014_human" = "Fonville, 2014",
+      "Ertesvag_2022" = "Ertesvag, 2022",
+      "Hinojosa_2020_UU" = "Hinojosa, 2020 (previously unvaccinated)",
+      "Hinojosa_2020_VU_VI" = "Hinojosa 2020 (previously vaccinated)"
+    )) +
+  theme(
+    legend.position = "top"
+  )
+
+
+# -----------------
+
+
+ggarrange(
+  align_to_inf_plot,
+  align_to_birth_within_plot,
+  align_to_birth_beyond_plot,
+  nrow = 1,
+  align = "hv",
+  common.legend = TRUE,
+  legend = "top",
+  labels = c("E", "F", "G"),
+  font.label = list(size = 28, color = "black", face = "bold")
+)
+
+```
