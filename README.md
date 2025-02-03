@@ -7,6 +7,9 @@ Correspondance regarding this study should be addressed to Bingyi Yang (byyang@c
 
 The primary analyses were conducted using the markdown file [main_analysis.Rmd](https://github.com/byyangyby/influenza_A_cross-reactivity/blob/main/main_analysis.Rmd), which generates the main figures presented in the manuscript.
 
+## Analysis software and packages
+This project uses the following R packages: ``tidyverse``, ``readxl``, ``openxlsx``, ``ggsci``, ``lubridate``, ``ggpubr``, ``brms``, ``rstan``, ``colorspace``, ``posterior``, ``pROC``, ``ggthemes``, ``truncnorm``, ``tableone``, ``fdrtool``, and ``patchwork``.
+
 ## Data sources
 All data for the analysis were sourced from previously published studies or public reports. We processed the data to facilitate our analysis, primarily by transforming the differences in isolation years between immunizing and tested viruses. Specifically, data were sourced from the following studies grouped by different host.
 1. Ferrets
