@@ -160,6 +160,151 @@ getModelDataWHO = function(data, i){
   
 }
 
+rawDataByYear = function(yr, ferret_data){
+  
+  yLim = c(yr-10, yr + 10)
+  data_used = ferret_data %>%
+    filter(
+      infected_year == yr
+    )
+  
+  n = nrow(data_used)
+  
+  ggplot(
+    data = data_used 
+  ) +
+    aes(
+      x = tested_year,
+      y = log_titer
+    ) +
+    geom_vline(
+      xintercept = yr,
+      linetype = "dashed",
+      size = 0.8
+    ) +
+    geom_hline(
+      yintercept = 2,
+      linetype = "dotted",
+      size = 0.8
+    ) +
+    geom_point(
+      size = 3,
+      alpha = 0.2,
+      position = position_dodge2(0.5),
+      color = "#133337"
+    ) +
+    geom_smooth(
+      formula = y ~ x,
+      method = "loess",
+      se = FALSE,
+      span = 0.9,
+      size = 2,
+      color = "#065535"
+    ) +
+    scale_y_continuous(
+      name = "HAI titer",
+      limits = c(0, 8),
+      expand = c(0, 0),
+      breaks = seq(0, 8, 1),
+      labels = 2^seq(0, 8, 1)*10
+    ) +
+    scale_x_continuous(
+      name = "Isolation of tested strain",
+      limits = yLim,
+      expand = c(0, 0),
+      breaks = seq(yLim[1], yLim[2], 4)
+    ) +
+    # scale_color_manual(
+    #   name = "Data source \n(Spanning of strains)",
+    #   values = c("smith" = "#B19CD9",
+    #              "fonville_2014" = "#9370DB",
+    #              # "fonville_2016" = "#7B68EE",
+    #              "who" = "#6A5ACD"),
+    #   labels = c("smith" = "Smith 2004 (1968 to 2004)",
+    #              "fonville_2014" = "Fonville 2014 (1968 to 2014)",
+    #              # "fonville_2016" = "Fonville 2016 (1968 to 2012)",
+    #              "who" = "Crick reports (1999 to 2022)"),
+    #   limits = unique(ferret_data$study)
+    # ) +
+    labs(
+      title = paste0(yr, " (n = ", n, ")")
+    ) +
+    theme(
+      legend.position = "top",
+      plot.title.position = "panel",
+      plot.margin = unit(c(2,2,2,2), units = "lines"),
+      legend.text = element_text(size = 12, colour = "black"),
+      legend.title = element_text(size = 12, colour = "black")
+    )
+  
+}
+
+rawDataByYearH1N1 = function(yr, h1_data){
+  
+  yLim = c(yr-10, yr + 10)
+  data_used = h1_data %>%
+    filter(
+      infected_year == yr
+    )
+  
+  n = nrow(data_used)
+  
+  ggplot(
+    data = data_used 
+  ) +
+    aes(
+      x = tested_year,
+      y = log_titer
+    ) +
+    geom_vline(
+      xintercept = yr,
+      linetype = "dashed",
+      size = 0.8
+    ) +
+    geom_hline(
+      yintercept = 2,
+      linetype = "dotted",
+      size = 0.8
+    ) +
+    geom_point(
+      size = 1,
+      alpha = 0.2,
+      position = position_dodge2(0.5),
+      color = "#133337"
+    ) +
+    geom_smooth(
+      formula = y ~ x,
+      method = "loess",
+      se = FALSE,
+      span = 0.9,
+      size = 2,
+      color = "#065535"
+    ) +
+    scale_y_continuous(
+      name = "HAI titer",
+      limits = c(0, 8),
+      expand = c(0, 0),
+      breaks = seq(0, 8, 1),
+      labels = 2^seq(0, 8, 1)*10
+    ) +
+    scale_x_continuous(
+      name = "Isolation of tested strain",
+      limits = yLim,
+      expand = c(0, 0),
+      breaks = seq(yLim[1], yLim[2], 4)
+    )  +
+    labs(
+      title = paste0(yr, " (n = ", n, ")")
+    ) +
+    theme(
+      legend.position = "top",
+      plot.title.position = "panel",
+      plot.margin = unit(c(2,2,2,2), units = "lines"),
+      legend.text = element_text(size = 12, colour = "black"),
+      legend.title = element_text(size = 12, colour = "black")
+    )
+  
+}
 
 ```
 
@@ -173,9 +318,7 @@ dataList = read_rds("data/combined_data.rds")
 
 ## Figure 1 C & D
 
-```{r, figure_1, echo=FALSE, message=FALSE, warning=FALSE, fig.height=15, fig.width=12}
-
-smith = read_csv("data/smith.csv")
+```{r prepare_ed_fig_1, echo=FALSE, message=FALSE, warning=FALSE}
 
 strains = c("HK/1/68",
             "EN/496/80",
@@ -191,11 +334,18 @@ strain_labels = set_names(c("A/Hong Kong/1/1968",
                             "A/Fujian/411/2002"),
                           strains)
 
-figure_1_c = 
-dataList$smith %>%
+ed_fig_1 = dataList$smith %>%
   filter(
     infected_strain %in% strains
-  ) %>%
+  )
+
+
+```
+
+```{r, figure_1, echo=FALSE, message=FALSE, warning=FALSE, fig.height=15, fig.width=12}
+
+
+figure_1_c = ed_fig_1 %>%
   mutate(
     infected_strain = factor(infected_strain,
                              levels = strains)
@@ -262,10 +412,7 @@ dataList$smith %>%
   )
 
 
-figure_1_d = dataList$smith %>%
-  filter(
-    infected_strain %in% strains
-  ) %>%
+figure_1_d = ed_fig_1 %>%
   mutate(
     infected_strain = factor(infected_strain,
                              levels = strains)
@@ -1029,7 +1176,7 @@ data = read_csv("data/human_hi_data.csv")
 
 studies = unique(as.character(data$study))
 
-# ferret and young childre
+# ferret and young children
 study_gp1 = c("smith", "fonville_2014", "fonville_2016", "who",
               "fonville_2016_children")
 
@@ -1119,18 +1266,8 @@ gamGMTByStudy = lapply(1:length(studies), function(i){
     data_used = data_used %>%
       filter(
         !(year_diff %in% c("-7", "-6"))
-      ) # %>%
-      # slice_sample(
-      #   n = 2290
-      # )
+      ) 
   }
-  
-  # if(studies[i] == "smith"){
-  #   data_used = data_used %>%
-  #     slice_sample(
-  #       n = 2290
-  #     )
-  # }
   
   
   data_new = data_used %>%
@@ -1167,7 +1304,7 @@ gamGMTByStudy = lapply(1:length(studies), function(i){
 
 ```
 
-```{r figure_4_c_e}
+```{r figure_4_c_e, echo=FALSE, message=FALSE}
 
 sp_gam_1 = ggplot(
   data = gamByStudy %>%
@@ -2043,5 +2180,53 @@ ggarrange(
   labels = c("E", "F", "G"),
   font.label = list(size = 28, color = "black", face = "bold")
 )
+
+```
+
+
+## Extended Data Figure 2
+
+```{r ed_fig_2, echo=FALSE, message=FALSE, warning=FALSE, fig.width=26, fig.height=20}}
+
+# Extended Data Figure 2
+
+h1_data = hi_data$h1n1 %>%
+  mutate(
+    log_titer = floor(log_titer),
+    infected_strain = infected_virus,
+    tested_strain = Virus,
+    infected_year = Infected_year,
+    tested_year = Collection_year,
+  ) %>%
+  select(
+    infected_strain,
+    tested_strain,
+    infected_year,
+    tested_year,
+    log_titer,
+    passage
+  ) %>%
+  distinct
+
+yrs = h1_data %>%
+  arrange(
+    infected_year
+  ) %>%
+  pull(
+    infected_year 
+  ) %>%
+  unique()
+
+
+panelList = lapply(yrs, function(i) rawDataByYearH1N1(i, h1_data))
+
+ggarrange(
+  plotlist = panelList,
+  ncol = 3,
+  nrow = 4,
+  common.legend = TRUE,
+  legend = "top"
+)
+
 
 ```
