@@ -1,0 +1,97 @@
+var,subtype,passage,est,est_ll,est_ul,year_diff
+year_diff-5,A(H1N1),Both cultured in eggs,8,7.45,8.55,-5
+year_diff-4,A(H1N1),Both cultured in eggs,6.551,6.411,6.691,-4
+year_diff-3,A(H1N1),Both cultured in eggs,6.307,6.119,6.495,-3
+year_diff-2,A(H1N1),Both cultured in eggs,6.191,6.106,6.275,-2
+year_diff-1,A(H1N1),Both cultured in eggs,6.421,6.312,6.53,-1
+year_diff0,A(H1N1),Both cultured in eggs,6.977,6.922,7.032,0
+year_diff1,A(H1N1),Both cultured in eggs,6.474,6.382,6.566,1
+year_diff2,A(H1N1),Both cultured in eggs,6.431,6.355,6.508,2
+year_diff3,A(H1N1),Both cultured in eggs,6.175,6.033,6.316,3
+year_diff4,A(H1N1),Both cultured in eggs,6.217,6.1,6.333,4
+year_diff5,A(H1N1),Both cultured in eggs,6.189,5.905,6.473,5
+year_diff6,A(H1N1),Both cultured in eggs,6.518,6.325,6.711,6
+year_diff-5,A(H1N1),Reference strains cultured in eggs,5.171,4.697,5.644,-5
+year_diff-4,A(H1N1),Reference strains cultured in eggs,4.517,4.368,4.666,-4
+year_diff-3,A(H1N1),Reference strains cultured in eggs,5.538,5.296,5.781,-3
+year_diff-2,A(H1N1),Reference strains cultured in eggs,4.114,4.012,4.217,-2
+year_diff-1,A(H1N1),Reference strains cultured in eggs,4.835,4.707,4.964,-1
+year_diff0,A(H1N1),Reference strains cultured in eggs,6.185,6.131,6.238,0
+year_diff1,A(H1N1),Reference strains cultured in eggs,6.188,6.152,6.224,1
+year_diff2,A(H1N1),Reference strains cultured in eggs,6.381,6.346,6.417,2
+year_diff3,A(H1N1),Reference strains cultured in eggs,6.313,6.274,6.353,3
+year_diff4,A(H1N1),Reference strains cultured in eggs,6.316,6.276,6.355,4
+year_diff5,A(H1N1),Reference strains cultured in eggs,6.369,6.317,6.42,5
+year_diff6,A(H1N1),Reference strains cultured in eggs,6.179,6.117,6.242,6
+year_diff-5,A(H1N1),Tested strains cultured in eggs,7.565,7.006,8.124,-5
+year_diff-4,A(H1N1),Tested strains cultured in eggs,6.459,6.253,6.665,-4
+year_diff-3,A(H1N1),Tested strains cultured in eggs,6.462,6.322,6.602,-3
+year_diff-2,A(H1N1),Tested strains cultured in eggs,6.282,6.177,6.387,-2
+year_diff-1,A(H1N1),Tested strains cultured in eggs,7.021,6.924,7.118,-1
+year_diff0,A(H1N1),Tested strains cultured in eggs,6.675,6.607,6.743,0
+year_diff1,A(H1N1),Tested strains cultured in eggs,7.076,6.981,7.171,1
+year_diff2,A(H1N1),Tested strains cultured in eggs,6.285,6.204,6.367,2
+year_diff3,A(H1N1),Tested strains cultured in eggs,6.661,6.492,6.831,3
+year_diff4,A(H1N1),Tested strains cultured in eggs,6.055,5.942,6.168,4
+year_diff5,A(H1N1),Tested strains cultured in eggs,5.854,5.59,6.119,5
+year_diff6,A(H1N1),Tested strains cultured in eggs,5.302,5.19,5.413,6
+year_diff-5,A(H1N1),Both cultured in cells,6.732,6.26,7.203,-5
+year_diff-4,A(H1N1),Both cultured in cells,6.41,6.068,6.752,-4
+year_diff-3,A(H1N1),Both cultured in cells,3.696,3.545,3.846,-3
+year_diff-2,A(H1N1),Both cultured in cells,3.217,3.09,3.343,-2
+year_diff-1,A(H1N1),Both cultured in cells,6.586,6.435,6.736,-1
+year_diff0,A(H1N1),Both cultured in cells,6.475,6.427,6.523,0
+year_diff1,A(H1N1),Both cultured in cells,6.691,6.654,6.727,1
+year_diff2,A(H1N1),Both cultured in cells,6.436,6.395,6.477,2
+year_diff3,A(H1N1),Both cultured in cells,6.467,6.417,6.517,3
+year_diff4,A(H1N1),Both cultured in cells,6.554,6.5,6.609,4
+year_diff5,A(H1N1),Both cultured in cells,6.422,6.359,6.486,5
+year_diff6,A(H1N1),Both cultured in cells,5.752,5.697,5.807,6
+year_diff-5,A(H3N2),Both cultured in eggs,2.286,1.894,2.678,-5
+year_diff-4,A(H3N2),Both cultured in eggs,3.075,2.843,3.306,-4
+year_diff-3,A(H3N2),Both cultured in eggs,4.715,4.502,4.927,-3
+year_diff-2,A(H3N2),Both cultured in eggs,4.99,4.83,5.15,-2
+year_diff-1,A(H3N2),Both cultured in eggs,5.272,5.156,5.388,-1
+year_diff0,A(H3N2),Both cultured in eggs,6.087,6.016,6.157,0
+year_diff1,A(H3N2),Both cultured in eggs,4.965,4.858,5.072,1
+year_diff2,A(H3N2),Both cultured in eggs,4.588,4.443,4.733,2
+year_diff3,A(H3N2),Both cultured in eggs,5.021,4.833,5.209,3
+year_diff4,A(H3N2),Both cultured in eggs,3.819,3.599,4.04,4
+year_diff5,A(H3N2),Both cultured in eggs,2.151,1.796,2.507,5
+year_diff6,A(H3N2),Both cultured in eggs,1.615,0.539,2.691,6
+year_diff-5,A(H3N2),Reference strains cultured in eggs,2.5,2.175,2.825,-5
+year_diff-4,A(H3N2),Reference strains cultured in eggs,2.881,2.517,3.245,-4
+year_diff-3,A(H3N2),Reference strains cultured in eggs,3.537,3.362,3.712,-3
+year_diff-2,A(H3N2),Reference strains cultured in eggs,4.026,3.913,4.138,-2
+year_diff-1,A(H3N2),Reference strains cultured in eggs,4.216,4.131,4.301,-1
+year_diff0,A(H3N2),Reference strains cultured in eggs,4.253,4.217,4.288,0
+year_diff1,A(H3N2),Reference strains cultured in eggs,3.979,3.952,4.006,1
+year_diff2,A(H3N2),Reference strains cultured in eggs,3.482,3.45,3.514,2
+year_diff3,A(H3N2),Reference strains cultured in eggs,3.079,3.038,3.12,3
+year_diff4,A(H3N2),Reference strains cultured in eggs,2.475,2.416,2.534,4
+year_diff5,A(H3N2),Reference strains cultured in eggs,1.731,1.649,1.812,5
+year_diff6,A(H3N2),Reference strains cultured in eggs,1.779,1.639,1.919,6
+year_diff-5,A(H3N2),Tested strains cultured in eggs,1.92,1.59,2.25,-5
+year_diff-4,A(H3N2),Tested strains cultured in eggs,3,2.735,3.265,-4
+year_diff-3,A(H3N2),Tested strains cultured in eggs,4.686,4.486,4.887,-3
+year_diff-2,A(H3N2),Tested strains cultured in eggs,4.735,4.627,4.843,-2
+year_diff-1,A(H3N2),Tested strains cultured in eggs,4.616,4.528,4.704,-1
+year_diff0,A(H3N2),Tested strains cultured in eggs,4.78,4.698,4.862,0
+year_diff1,A(H3N2),Tested strains cultured in eggs,4.334,4.233,4.436,1
+year_diff2,A(H3N2),Tested strains cultured in eggs,4.162,4.027,4.297,2
+year_diff3,A(H3N2),Tested strains cultured in eggs,2.797,2.589,3.005,3
+year_diff4,A(H3N2),Tested strains cultured in eggs,2.805,2.397,3.213,4
+year_diff5,A(H3N2),Tested strains cultured in eggs,2.803,2.349,3.258,5
+year_diff6,A(H3N2),Tested strains cultured in eggs,1.929,1.231,2.626,6
+year_diff-5,A(H3N2),Both cultured in cells,2.179,1.791,2.566,-5
+year_diff-4,A(H3N2),Both cultured in cells,3.762,3.601,3.924,-4
+year_diff-3,A(H3N2),Both cultured in cells,3.954,3.825,4.084,-3
+year_diff-2,A(H3N2),Both cultured in cells,3.962,3.859,4.064,-2
+year_diff-1,A(H3N2),Both cultured in cells,4.484,4.415,4.553,-1
+year_diff0,A(H3N2),Both cultured in cells,4.706,4.676,4.737,0
+year_diff1,A(H3N2),Both cultured in cells,4.309,4.285,4.334,1
+year_diff2,A(H3N2),Both cultured in cells,3.419,3.389,3.449,2
+year_diff3,A(H3N2),Both cultured in cells,2.944,2.901,2.986,3
+year_diff4,A(H3N2),Both cultured in cells,2.459,2.389,2.53,4
+year_diff5,A(H3N2),Both cultured in cells,2.262,2.185,2.338,5
+year_diff6,A(H3N2),Both cultured in cells,2.357,2.173,2.541,6
