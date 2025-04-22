@@ -8,6 +8,8 @@ output: html_document
 ## Pre-analysis settings
 
 ```{r Global_Setting, warning=FALSE, error=FALSE, message=FALSE}
+setwd("~/Documents/GitHub/influenza_A_cross-reactivity")
+
 #
 # Clean antibody data
 #
@@ -312,6 +314,7 @@ The following functions load a list of cleaned antibody data for h3n2, including
 
 ```{r, read_combined_data, message=FALSE}
 
+# data for h3n2
 dataList = read_rds("data/combined_data.rds")
 
 ```
@@ -2180,6 +2183,90 @@ ggarrange(
   labels = c("E", "F", "G"),
   font.label = list(size = 28, color = "black", face = "bold")
 )
+
+```
+
+
+## Extended Data Figure 1
+
+```{r ed_fig_1, echo=FALSE, message=FALSE, warning=FALSE, fig.width=26, fig.height=20}}
+
+# Extended Data Figure 1
+
+ferret_data = lapply(c(1,2,4), function(i){
+  
+  if(i != 4){
+    
+    data_used = dataList[[i]] %>%
+      mutate(
+        study = names(dataList)[i],
+        log_titer = floor(log_titer)
+      ) %>%
+      select(
+        study,
+        infected_strain,
+        tested_strain,
+        infected_year,
+        tested_year,
+        log_titer
+      ) 
+    
+  } else {
+    
+    data_used = dataList[[i]] %>%
+      filter(
+        Passage_history_infected == "Egg" # &
+           # cell_EGG == "yes"
+      ) %>%
+      mutate(
+        study = names(dataList)[i],
+        log_titer = floor(log_titer),
+        infected_strain = infected_virus,
+        tested_strain = Virus,
+        infected_year = year_infected,
+        tested_year = Collection_year,
+      ) %>%
+      select(
+        study,
+        infected_strain,
+        tested_strain,
+        infected_year,
+        tested_year,
+        log_titer
+      ) %>%
+      distinct
+  }
+
+  
+}) %>%
+  do.call(
+    'rbind', .
+  ) %>%
+  drop_na() %>%
+  mutate(
+    study = factor(study)
+  )
+
+yrs = ferret_data %>%
+  arrange(
+    infected_year
+  ) %>%
+  pull(
+    infected_year 
+  ) %>%
+  unique()
+
+
+panelList = lapply(yrs, function(i) rawDataByYear(i, ferret_data))
+
+ggarrange(
+  plotlist = panelList,
+  ncol = 7,
+  nrow = 7,
+  common.legend = TRUE,
+  legend = "top"
+)
+
 
 ```
 
