@@ -4,7 +4,7 @@
 
 Data and R scripts were used to support the paper: 
 
-Bingyi Yang*, Katelyn M. Gostic, Dillon C. Adam, Ru Zhang, Tal Einav, Liping Peng, Sook San Wong, Tim K. Tsang, Derek A. T. Cummings, Sheena G. Sullivan, Sarah Cobey, Benjamin J. Cowling. [**Breadth of influenza A antibody cross-reactivity varies by virus isolation interval and subtype%%](https://doi.org/10.1038/s41564-025-02033-4). Nature Microbiology 10, 1711–1722 (2025).
+Bingyi Yang*, Katelyn M. Gostic, Dillon C. Adam, Ru Zhang, Tal Einav, Liping Peng, Sook San Wong, Tim K. Tsang, Derek A. T. Cummings, Sheena G. Sullivan, Sarah Cobey, Benjamin J. Cowling. [**Breadth of influenza A antibody cross-reactivity varies by virus isolation interval and subtype**](https://doi.org/10.1038/s41564-025-02033-4). Nature Microbiology 10, 1711–1722 (2025).
 
 Correspondance regarding this study should be addressed to Bingyi Yang (byyang@connect.hku.hk).
 
